@@ -35,7 +35,7 @@ exports.sketchbookCopy = async (req, res) => {
     // Set to datastore
     const id = name.replace('.png', '').replace('/', '');
     datastore.save({
-      key: datastore.key(kindName),
+      key: datastore.key([kindName, id]),
       data: {
         ID:           id,
         SketchbookID: desID,
