@@ -5,8 +5,11 @@ exports.sketchbookCopy = async (req, res) => {
   let orgID = req.body.orgID;
   let desID = req.body.desID;
 
+  // Check params
   if (!orgID || !desID) {
-    res.status(500).send("ERROR: Param is wrong. You need input orgID and desID.")
+    const err = 'Param is wrong. You need input orgID and desID.'
+    console.error('ERROR:', err);
+    res.status(200).send(err)
     return;
   }
 
@@ -17,12 +20,26 @@ exports.sketchbookCopy = async (req, res) => {
   
   const storage = new Storage();
   const datastore = new Datastore();
-
-  const [files] = await storage.bucket(srcBucketName).getFiles({ prefix: floderName})
   
-  files.forEach(async (file) => {
+  const entities = [];
+  const promises = [];
+
+  const [files] = await storage.bucket(srcBucketName).getFiles({ prefix: floderName});
+  await Promise.all(files.map(async (file) => {
     const name = file.name.replace(floderName, '');
-    console.log(desFloderName + name);
+
+    // Add to Datastore entities
+    const id = name.replace('.png', '').replace('/', '');
+    const entityOne = {
+      key: datastore.key([kindName, id]),
+      data: {
+        ID:           id,
+        SketchbookID: desID,
+        URI:          "https://storage.googleapis.com/" + srcBucketName + '/' + desFloderName + name,
+        CreatedAt:    new Date()
+      }
+    }
+    entities.push(entityOne);
 
     // Copy file
     await storage.bucket(srcBucketName)
@@ -31,23 +48,18 @@ exports.sketchbookCopy = async (req, res) => {
       .file(desFloderName + name), 
       { predefinedAcl: 'publicRead' }
     );
+  }));
 
-    // Set to datastore
-    const id = name.replace('.png', '').replace('/', '');
-    datastore.save({
-      key: datastore.key([kindName, id]),
-      data: {
-        ID:           id,
-        SketchbookID: desID,
-        URI:          "https://storage.googleapis.com/" + srcBucketName + '/' + desFloderName + name,
-        CreatedAt:    new Date()
-      }
+  // Upsert to Datastore
+  if (entities.length > 0) {
+    datastore.upsert(entities).then(response => {
+      res.status(200).send("Datastore entities added.");
     }).catch(err => {
       console.error('ERROR:', err);
       res.status(200).send(err);
       return;
     });
-  });
-
-  res.status(200).send("function successed.");
+  } else {
+    res.status(200).send("None entity.");
+  }
 }
