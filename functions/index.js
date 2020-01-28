@@ -22,20 +22,19 @@ exports.sketchbookCopy = async (req, res) => {
   const datastore = new Datastore();
   
   const entities = [];
-  const promises = [];
 
   const [files] = await storage.bucket(srcBucketName).getFiles({ prefix: floderName});
   await Promise.all(files.map(async (file) => {
     const name = file.name.replace(floderName, '');
+    const id = name.replace('.png', '').replace('/', '') + '-c';
+    const desFileName = desFloderName + '/' + id + '.png';
 
-    // Add to Datastore entities
-    const id = name.replace('.png', '').replace('/', '');
     const entityOne = {
       key: datastore.key([kindName, id]),
       data: {
         ID:           id,
         SketchbookID: desID,
-        URI:          "https://storage.googleapis.com/" + srcBucketName + '/' + desFloderName + name,
+        URI:          "https://storage.googleapis.com/" + srcBucketName + '/' + desFileName,
         CreatedAt:    new Date()
       }
     }
@@ -45,14 +44,17 @@ exports.sketchbookCopy = async (req, res) => {
     await storage.bucket(srcBucketName)
       .file(file.name)
       .copy(storage.bucket(srcBucketName)
-      .file(desFloderName + name), 
+      .file(desFileName), 
       { predefinedAcl: 'publicRead' }
     );
   }));
 
-  // Upsert to Datastore
+  console.log('Copied Files:');
+  console.log(entities);
+
+  // insert to Datastore
   if (entities.length > 0) {
-    datastore.upsert(entities).then(response => {
+    datastore.insert(entities).then(response => {
       res.status(200).send("Datastore entities added.");
     }).catch(err => {
       console.error('ERROR:', err);
